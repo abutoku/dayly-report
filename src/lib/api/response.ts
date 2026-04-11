@@ -122,9 +122,11 @@ export function errorResponse(
 ): NextResponse<ErrorResponseBody> {
   const error: ErrorBody =
     details === undefined ? { code, message } : { code, message, details };
+  // status は ErrorCode から決まる invariant のため、init.status による
+  // 上書きを許さないよう必ず後勝ちで status を確定させる。
   return NextResponse.json<ErrorResponseBody>(
     { error },
-    { status: ERROR_STATUS[code], ...init },
+    { ...init, status: ERROR_STATUS[code] },
   );
 }
 

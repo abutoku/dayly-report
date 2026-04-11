@@ -80,6 +80,23 @@ describe("errorResponse", () => {
       },
     });
   });
+
+  it("ignores caller-provided init.status to keep code↔status invariant", () => {
+    // Route Handler 側で誤って `{ status: 200 }` を渡しても、エラーコードに
+    // 紐づく HTTP ステータス（403）が必ず優先されることを保証する。
+    const res = errorResponse("FORBIDDEN", "権限がありません", undefined, {
+      status: 200,
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("preserves caller-provided headers from init", () => {
+    const res = errorResponse("NOT_FOUND", "見つかりません", undefined, {
+      headers: { "x-trace-id": "abc-123" },
+    });
+    expect(res.status).toBe(404);
+    expect(res.headers.get("x-trace-id")).toBe("abc-123");
+  });
 });
 
 describe("formatZodError / zodErrorResponse", () => {
