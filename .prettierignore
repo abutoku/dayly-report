@@ -1,0 +1,25 @@
+# Build artifacts
+.next/
+out/
+build/
+dist/
+coverage/
+
+# Dependencies
+node_modules/
+
+# Generated files
+src/generated/
+*.tsbuildinfo
+next-env.d.ts
+
+# Lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Husky internal
+.husky/_/
+
+# OS / editor
+.DS_Store
