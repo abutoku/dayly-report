@@ -1,0 +1,90 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Salesperson {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  managerId Int?     @map("manager_id")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  manager      Salesperson?  @relation("ManagerSubordinates", fields: [managerId], references: [id])
+  subordinates Salesperson[] @relation("ManagerSubordinates")
+  dailyReports DailyReport[]
+  comments     Comment[]
+
+  @@map("salespersons")
+}
+
+model Customer {
+  id        Int      @id @default(autoincrement())
+  name      String
+  address   String?
+  phone     String?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  visitRecords VisitRecord[]
+
+  @@map("customers")
+}
+
+model DailyReport {
+  id            Int      @id @default(autoincrement())
+  salespersonId Int      @map("salesperson_id")
+  reportDate    DateTime @map("report_date") @db.Date
+  problem       String?
+  plan          String?
+  status        String   @default("draft")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  salesperson  Salesperson  @relation(fields: [salespersonId], references: [id])
+  visitRecords VisitRecord[]
+  comments     Comment[]
+
+  @@unique([salespersonId, reportDate])
+  @@map("daily_reports")
+}
+
+model VisitRecord {
+  id            Int      @id @default(autoincrement())
+  dailyReportId Int      @map("daily_report_id")
+  customerId    Int      @map("customer_id")
+  content       String
+  visitTime     String   @map("visit_time")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  dailyReport DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
+  customer    Customer    @relation(fields: [customerId], references: [id])
+
+  @@map("visit_records")
+}
+
+model Comment {
+  id            Int      @id @default(autoincrement())
+  dailyReportId Int      @map("daily_report_id")
+  commenterId   Int      @map("commenter_id")
+  content       String
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  dailyReport DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
+  commenter   Salesperson @relation(fields: [commenterId], references: [id])
+
+  @@map("comments")
+}
