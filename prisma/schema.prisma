@@ -16,7 +16,7 @@ model Salesperson {
   id        Int      @id @default(autoincrement())
   name      String
   email     String   @unique
-  passwordHash String   @map("password_hash")
+  passwordHash String @map("password_hash")
   managerId Int?     @map("manager_id")
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
@@ -67,7 +67,7 @@ model VisitRecord {
   dailyReportId Int      @map("daily_report_id")
   customerId    Int      @map("customer_id")
   content       String
-  visitTime     String   @map("visit_time")
+  visitTime     DateTime @map("visit_time") @db.Time()
   createdAt     DateTime @default(now()) @map("created_at")
 
   dailyReport DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
