@@ -86,6 +86,11 @@ async function main() {
 
   const customers = [customerA, customerB, customerC];
 
+  // --- 既存のシードデータをクリーンアップ（冪等性確保） ---
+  await prisma.comment.deleteMany();
+  await prisma.visitRecord.deleteMany();
+  await prisma.dailyReport.deleteMany();
+
   // --- 過去3日分の日報 (田中) ---
   const today = new Date();
   for (let daysAgo = 1; daysAgo <= 3; daysAgo++) {
