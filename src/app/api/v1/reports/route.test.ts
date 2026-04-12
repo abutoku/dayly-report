@@ -7,6 +7,7 @@ vi.mock("@/lib/prisma", () => ({
     salesperson: {
       findUnique: vi.fn(),
       findMany: vi.fn(),
+      findFirst: vi.fn(),
     },
     dailyReport: {
       count: vi.fn(),
@@ -33,6 +34,9 @@ const mockFindUniqueSalesperson = prisma.salesperson.findUnique as ReturnType<
 const mockFindManySalesperson = prisma.salesperson.findMany as ReturnType<
   typeof vi.fn
 >;
+const mockFindFirstSalesperson = (
+  prisma.salesperson as unknown as { findFirst: ReturnType<typeof vi.fn> }
+).findFirst;
 const mockDailyReportCount = prisma.dailyReport.count as ReturnType<
   typeof vi.fn
 >;
@@ -133,6 +137,7 @@ describe("GET /api/v1/reports", () => {
   // RPT-002: 上長がsalesperson_id指定で部下の日報を取得
   it("RPT-002: manager can filter by salesperson_id", async () => {
     setupAuth(managerJwt, managerUser);
+    mockFindFirstSalesperson.mockResolvedValue({ id: 1 });
     mockDailyReportCount.mockResolvedValue(1);
     mockDailyReportFindMany.mockResolvedValue([sampleReport]);
 
@@ -305,6 +310,42 @@ describe("GET /api/v1/reports", () => {
 
     expect(response.status).toBe(401);
     expect(json.error.code).toBe("UNAUTHORIZED");
+  });
+
+  // PERM-004: 上長が部下でない営業のsalesperson_idを指定 → 403
+  it("PERM-004: returns 403 when manager specifies non-subordinate salesperson_id", async () => {
+    setupAuth(managerJwt, managerUser);
+    mockFindFirstSalesperson.mockResolvedValue(null);
+
+    const response = await GET(
+      createRequest("valid-token", { salesperson_id: "999" }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(json.error.code).toBe("FORBIDDEN");
+  });
+
+  // 上長が自分のsalesperson_idを指定した場合は正常に取得できる
+  it("manager can specify own salesperson_id", async () => {
+    setupAuth(managerJwt, managerUser);
+    mockDailyReportCount.mockResolvedValue(1);
+    mockDailyReportFindMany.mockResolvedValue([
+      {
+        ...sampleReport,
+        salesperson: { id: 10, name: "鈴木部長" },
+      },
+    ]);
+
+    const response = await GET(
+      createRequest("valid-token", { salesperson_id: "10" }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data).toHaveLength(1);
+    // findFirstは呼ばれない（自分のIDなのでスキップ）
+    expect(mockFindFirstSalesperson).not.toHaveBeenCalled();
   });
 
   // レスポンス形式の確認
