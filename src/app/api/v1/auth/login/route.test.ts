@@ -40,7 +40,7 @@ const activeSalesperson = {
   id: 1,
   name: "田中太郎",
   email: "tanaka@example.com",
-  password: "$2a$10$hashedpassword",
+  passwordHash: "$2a$10$hashedpassword",
   managerId: null,
   isActive: true,
   subordinates: [{ id: 2 }],

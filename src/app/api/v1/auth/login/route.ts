@@ -5,12 +5,10 @@ import { comparePassword, signToken, unauthorizedResponse } from "@/lib/auth";
 
 const loginSchema = z.object({
   email: z
-    .string({ required_error: "メールアドレスは必須です" })
+    .string()
     .min(1, "メールアドレスは必須です")
     .email("メールアドレスの形式が不正です"),
-  password: z
-    .string({ required_error: "パスワードは必須です" })
-    .min(1, "パスワードは必須です"),
+  password: z.string().min(1, "パスワードは必須です"),
 });
 
 const INVALID_CREDENTIALS_MESSAGE =
@@ -66,7 +64,10 @@ export async function POST(request: NextRequest) {
     return unauthorizedResponse(INVALID_CREDENTIALS_MESSAGE);
   }
 
-  const passwordMatch = await comparePassword(password, salesperson.password);
+  const passwordMatch = await comparePassword(
+    password,
+    salesperson.passwordHash,
+  );
   if (!passwordMatch) {
     return unauthorizedResponse(INVALID_CREDENTIALS_MESSAGE);
   }
