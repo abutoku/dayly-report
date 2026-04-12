@@ -5,12 +5,14 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   OpenAPIRegistry,
   OpenApiGeneratorV31,
 } from "@asteasolutions/zod-to-openapi";
 
+import "../src/schemas/setup";
 import {
   LoginRequestSchema,
   LoginResponseDataSchema,
@@ -46,6 +48,7 @@ import {
   SalespersonDetailSchema,
   SalespersonListQuerySchema,
 } from "../src/schemas/salesperson";
+import yaml from "yaml";
 
 const registry = new OpenAPIRegistry();
 
@@ -536,75 +539,7 @@ const doc = generator.generateDocument({
   servers: [{ url: "http://localhost:3000", description: "開発環境" }],
 });
 
-const yaml = jsonToYaml(doc);
-const outPath = path.resolve(__dirname, "..", "openapi.yaml");
-fs.writeFileSync(outPath, yaml, "utf-8");
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
+const outPath = path.resolve(currentDir, "..", "openapi.yaml");
+fs.writeFileSync(outPath, yaml.stringify(doc), "utf-8");
 console.log(`OpenAPI spec generated: ${outPath}`);
-
-// ---------------------------------------------------------------------------
-// 簡易 JSON → YAML 変換
-// ---------------------------------------------------------------------------
-function jsonToYaml(obj: unknown, indent = 0): string {
-  const pad = "  ".repeat(indent);
-
-  if (obj === null || obj === undefined) return "null";
-  if (typeof obj === "boolean") return obj ? "true" : "false";
-  if (typeof obj === "number") return String(obj);
-  if (typeof obj === "string") {
-    if (
-      obj.includes("\n") ||
-      obj.includes(":") ||
-      obj.includes("#") ||
-      obj.includes("'") ||
-      obj.includes('"') ||
-      obj.startsWith("{") ||
-      obj.startsWith("[") ||
-      obj === "true" ||
-      obj === "false" ||
-      obj === "null" ||
-      /^\d/.test(obj)
-    ) {
-      // Use double-quoted scalar with escaping
-      return `"${obj.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n")}"`;
-    }
-    return obj;
-  }
-
-  if (Array.isArray(obj)) {
-    if (obj.length === 0) return "[]";
-    return obj
-      .map((item) => {
-        const val = jsonToYaml(item, indent + 1);
-        if (typeof item === "object" && item !== null) {
-          // First key goes on the same line as the dash
-          const lines = val.split("\n");
-          return `${pad}- ${lines[0].trimStart()}\n${lines.slice(1).join("\n")}`;
-        }
-        return `${pad}- ${val}`;
-      })
-      .join("\n");
-  }
-
-  if (typeof obj === "object") {
-    const entries = Object.entries(obj as Record<string, unknown>);
-    if (entries.length === 0) return "{}";
-    return entries
-      .map(([key, value]) => {
-        if (
-          value !== null &&
-          typeof value === "object" &&
-          !Array.isArray(value) &&
-          Object.keys(value as Record<string, unknown>).length > 0
-        ) {
-          return `${pad}${key}:\n${jsonToYaml(value, indent + 1)}`;
-        }
-        if (Array.isArray(value) && value.length > 0) {
-          return `${pad}${key}:\n${jsonToYaml(value, indent + 1)}`;
-        }
-        return `${pad}${key}: ${jsonToYaml(value, indent + 1)}`;
-      })
-      .join("\n");
-  }
-
-  return String(obj);
-}

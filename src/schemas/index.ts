@@ -1,3 +1,5 @@
+import "./setup";
+
 export {
   PaginationSchema,
   PaginationQuerySchema,
@@ -8,7 +10,11 @@ export {
   paginatedSchema,
 } from "./common";
 
-export { LoginRequestSchema, LoginResponseDataSchema } from "./auth";
+export {
+  LoginRequestSchema,
+  LoginSalespersonSchema,
+  LoginResponseDataSchema,
+} from "./auth";
 
 export {
   VisitRequestSchema,

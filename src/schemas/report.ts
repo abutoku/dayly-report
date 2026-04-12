@@ -1,5 +1,3 @@
-import "./setup";
-
 import { z } from "zod";
 
 import { PaginationQuerySchema } from "./common";
