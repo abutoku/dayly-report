@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
-import { GET } from "./route";
+import { Prisma } from "@/generated/prisma/client";
+import { GET, POST } from "./route";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -13,6 +14,10 @@ vi.mock("@/lib/prisma", () => ({
       count: vi.fn(),
       findMany: vi.fn(),
     },
+    customer: {
+      findMany: vi.fn(),
+    },
+    $transaction: vi.fn(),
   },
 }));
 
@@ -43,6 +48,12 @@ const mockDailyReportCount = prisma.dailyReport.count as ReturnType<
 const mockDailyReportFindMany = prisma.dailyReport.findMany as ReturnType<
   typeof vi.fn
 >;
+const mockCustomerFindMany = prisma.customer.findMany as ReturnType<
+  typeof vi.fn
+>;
+const mockTransaction = (
+  prisma as unknown as { $transaction: ReturnType<typeof vi.fn> }
+).$transaction;
 
 // テストデータ
 const salesJwt = {
@@ -364,5 +375,369 @@ describe("GET /api/v1/reports", () => {
     expect(report.salesperson).toEqual({ id: 1, name: "田中太郎" });
     expect(report.visit_count).toBe(3);
     expect(report.status).toBe("submitted");
+  });
+});
+
+// --- POST /api/v1/reports ---
+
+function createPostRequest(token?: string, body?: unknown): NextRequest {
+  const url = "http://localhost/api/v1/reports";
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  return new NextRequest(url, {
+    method: "POST",
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+}
+
+const validSubmitBody = {
+  report_date: "2026-04-04",
+  problem: "A商事の見積について、特別値引きの承認が必要。",
+  plan: "A商事への見積作成、B工業への議事録送付",
+  status: "submitted",
+  visits: [
+    {
+      customer_id: 1,
+      visit_time: "09:00",
+      content: "新規提案の打合せ。見積依頼あり。",
+    },
+    {
+      customer_id: 2,
+      visit_time: "11:00",
+      content: "定期フォロー。次回は来月予定。",
+    },
+  ],
+};
+
+function setupPostTransactionSuccess(overrides?: {
+  id?: number;
+  reportDate?: string;
+  problem?: string | null;
+  plan?: string | null;
+  status?: string;
+  visitRecords?: unknown[];
+}) {
+  const defaults = {
+    id: 1,
+    reportDate: new Date("2026-04-04"),
+    problem: "A商事の見積について、特別値引きの承認が必要。",
+    plan: "A商事への見積作成、B工業への議事録送付",
+    status: "submitted",
+    createdAt: new Date("2026-04-04T17:00:00Z"),
+    visitRecords: [
+      {
+        id: 1,
+        customer: { id: 1, name: "A商事" },
+        visitTime: new Date("1970-01-01T09:00:00Z"),
+        content: "新規提案の打合せ。見積依頼あり。",
+      },
+      {
+        id: 2,
+        customer: { id: 2, name: "B工業" },
+        visitTime: new Date("1970-01-01T11:00:00Z"),
+        content: "定期フォロー。次回は来月予定。",
+      },
+    ],
+  };
+
+  const reportData = { ...defaults, ...overrides };
+  if (overrides?.reportDate) {
+    reportData.reportDate = new Date(overrides.reportDate);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  mockTransaction.mockImplementation(async (fn: (tx: any) => any) => {
+    const mockTx = {
+      dailyReport: {
+        create: vi.fn().mockResolvedValue(reportData),
+      },
+    };
+    return fn(mockTx);
+  });
+}
+
+describe("POST /api/v1/reports", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe("正常系", () => {
+    // RPT-020: 訪問記録2件＋Problem＋Planを入力して提出
+    it("RPT-020: 訪問記録2件＋Problem＋Planを入力して提出", async () => {
+      setupAuth(salesJwt, salesUser);
+      mockCustomerFindMany.mockResolvedValue([{ id: 1 }, { id: 2 }]);
+      setupPostTransactionSuccess();
+
+      const response = await POST(
+        createPostRequest("valid-token", validSubmitBody),
+      );
+      const json = await response.json();
+
+      expect(response.status).toBe(201);
+      expect(json.data.id).toBe(1);
+      expect(json.data.report_date).toBe("2026-04-04");
+      expect(json.data.problem).toBe(
+        "A商事の見積について、特別値引きの承認が必要。",
+      );
+      expect(json.data.plan).toBe("A商事への見積作成、B工業への議事録送付");
+      expect(json.data.status).toBe("submitted");
+      expect(json.data.visits).toHaveLength(2);
+      expect(json.data.visits[0].customer).toEqual({ id: 1, name: "A商事" });
+      expect(json.data.visits[0].visit_time).toBe("09:00");
+      expect(json.data.visits[1].customer).toEqual({ id: 2, name: "B工業" });
+      expect(json.data.created_at).toBeDefined();
+    });
+
+    // RPT-021: 下書きとして保存（status=draft）
+    it("RPT-021: 下書きとして保存（status=draft）", async () => {
+      setupAuth(salesJwt, salesUser);
+      mockCustomerFindMany.mockResolvedValue([{ id: 1 }]);
+      setupPostTransactionSuccess({
+        status: "draft",
+        visitRecords: [
+          {
+            id: 1,
+            customer: { id: 1, name: "A商事" },
+            visitTime: new Date("1970-01-01T09:00:00Z"),
+            content: "打合せ",
+          },
+        ],
+      });
+
+      const body = {
+        report_date: "2026-04-04",
+        problem: "課題あり",
+        plan: "予定あり",
+        status: "draft",
+        visits: [{ customer_id: 1, visit_time: "09:00", content: "打合せ" }],
+      };
+
+      const response = await POST(createPostRequest("valid-token", body));
+      const json = await response.json();
+
+      expect(response.status).toBe(201);
+      expect(json.data.status).toBe("draft");
+    });
+
+    // RPT-022: Problem・Plan未入力で下書き保存
+    it("RPT-022: Problem・Plan未入力で下書き保存", async () => {
+      setupAuth(salesJwt, salesUser);
+      setupPostTransactionSuccess({
+        problem: null,
+        plan: null,
+        status: "draft",
+        visitRecords: [],
+      });
+
+      const body = {
+        report_date: "2026-04-04",
+        status: "draft",
+      };
+
+      const response = await POST(createPostRequest("valid-token", body));
+      const json = await response.json();
+
+      expect(response.status).toBe(201);
+      expect(json.data.problem).toBeNull();
+      expect(json.data.plan).toBeNull();
+    });
+
+    // RPT-023: 同一顧客への複数訪問記録を登録
+    it("RPT-023: 同一顧客への複数訪問記録を登録", async () => {
+      setupAuth(salesJwt, salesUser);
+      mockCustomerFindMany.mockResolvedValue([{ id: 1 }]);
+      setupPostTransactionSuccess({
+        visitRecords: [
+          {
+            id: 1,
+            customer: { id: 1, name: "A商事" },
+            visitTime: new Date("1970-01-01T09:00:00Z"),
+            content: "午前の打合せ",
+          },
+          {
+            id: 2,
+            customer: { id: 1, name: "A商事" },
+            visitTime: new Date("1970-01-01T14:00:00Z"),
+            content: "午後の打合せ",
+          },
+        ],
+      });
+
+      const body = {
+        report_date: "2026-04-04",
+        status: "submitted",
+        visits: [
+          { customer_id: 1, visit_time: "09:00", content: "午前の打合せ" },
+          { customer_id: 1, visit_time: "14:00", content: "午後の打合せ" },
+        ],
+      };
+
+      const response = await POST(createPostRequest("valid-token", body));
+      const json = await response.json();
+
+      expect(response.status).toBe(201);
+      expect(json.data.visits).toHaveLength(2);
+      expect(json.data.visits[0].customer.id).toBe(1);
+      expect(json.data.visits[1].customer.id).toBe(1);
+    });
+
+    // RPT-026: 訪問記録0件で下書き保存は許可される
+    it("RPT-026: 訪問記録0件で下書き保存は許可される", async () => {
+      setupAuth(salesJwt, salesUser);
+      setupPostTransactionSuccess({
+        status: "draft",
+        visitRecords: [],
+      });
+
+      const body = {
+        report_date: "2026-04-04",
+        status: "draft",
+      };
+
+      const response = await POST(createPostRequest("valid-token", body));
+      const json = await response.json();
+
+      expect(response.status).toBe(201);
+      expect(json.data.status).toBe("draft");
+      expect(json.data.visits).toHaveLength(0);
+    });
+  });
+
+  describe("異常系", () => {
+    // RPT-024: 報告日が未入力
+    it("RPT-024: 報告日が未入力", async () => {
+      setupAuth(salesJwt, salesUser);
+
+      const body = {
+        status: "draft",
+      };
+
+      const response = await POST(createPostRequest("valid-token", body));
+      const json = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(json.error.code).toBe("VALIDATION_ERROR");
+    });
+
+    // RPT-025: 訪問記録0件で提出（status=submitted）
+    it("RPT-025: 訪問記録0件で提出（status=submitted）", async () => {
+      setupAuth(salesJwt, salesUser);
+
+      const body = {
+        report_date: "2026-04-04",
+        status: "submitted",
+      };
+
+      const response = await POST(createPostRequest("valid-token", body));
+      const json = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(json.error.code).toBe("VALIDATION_ERROR");
+    });
+
+    // RPT-027: 同一日付の日報が既に存在する場合
+    it("RPT-027: 同一日付の日報が既に存在する場合", async () => {
+      setupAuth(salesJwt, salesUser);
+      mockCustomerFindMany.mockResolvedValue([{ id: 1 }, { id: 2 }]);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      mockTransaction.mockImplementation(async (fn: (tx: any) => any) => {
+        const mockTx = {
+          dailyReport: {
+            create: vi
+              .fn()
+              .mockRejectedValue(
+                new Prisma.PrismaClientKnownRequestError(
+                  "Unique constraint failed on the fields: (`salesperson_id`,`report_date`)",
+                  { code: "P2002", clientVersion: "6.x" },
+                ),
+              ),
+          },
+        };
+        return fn(mockTx);
+      });
+
+      const response = await POST(
+        createPostRequest("valid-token", validSubmitBody),
+      );
+      const json = await response.json();
+
+      expect(response.status).toBe(409);
+      expect(json.error.code).toBe("CONFLICT");
+      expect(json.error.message).toContain("2026-04-04");
+    });
+
+    // RPT-028: 存在しないcustomer_idを指定
+    it("RPT-028: 存在しないcustomer_idを指定", async () => {
+      setupAuth(salesJwt, salesUser);
+      // customer_id 999 does not exist — return only id 1
+      mockCustomerFindMany.mockResolvedValue([{ id: 1 }]);
+
+      const body = {
+        report_date: "2026-04-04",
+        status: "submitted",
+        visits: [
+          { customer_id: 1, visit_time: "09:00", content: "打合せ" },
+          { customer_id: 999, visit_time: "11:00", content: "訪問" },
+        ],
+      };
+
+      const response = await POST(createPostRequest("valid-token", body));
+      const json = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(json.error.code).toBe("VALIDATION_ERROR");
+      expect(json.error.message).toContain("999");
+    });
+
+    // RPT-029: 訪問時刻の形式が不正（例: "25:00"）
+    it('RPT-029: 訪問時刻の形式が不正（例: "25:00"）', async () => {
+      setupAuth(salesJwt, salesUser);
+
+      const body = {
+        report_date: "2026-04-04",
+        status: "submitted",
+        visits: [{ customer_id: 1, visit_time: "25:00", content: "打合せ" }],
+      };
+
+      const response = await POST(createPostRequest("valid-token", body));
+      const json = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(json.error.code).toBe("VALIDATION_ERROR");
+    });
+
+    // RPT-030: 訪問内容が未入力
+    it("RPT-030: 訪問内容が未入力", async () => {
+      setupAuth(salesJwt, salesUser);
+
+      const body = {
+        report_date: "2026-04-04",
+        status: "submitted",
+        visits: [{ customer_id: 1, visit_time: "09:00", content: "" }],
+      };
+
+      const response = await POST(createPostRequest("valid-token", body));
+      const json = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(json.error.code).toBe("VALIDATION_ERROR");
+    });
+
+    // RPT-031: 未認証でアクセス
+    it("RPT-031: 未認証でアクセス", async () => {
+      const response = await POST(
+        createPostRequest(undefined, validSubmitBody),
+      );
+      const json = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(json.error.code).toBe("UNAUTHORIZED");
+    });
   });
 });

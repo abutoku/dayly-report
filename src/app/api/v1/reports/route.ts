@@ -8,11 +8,16 @@ import {
 } from "@/lib/auth/middleware";
 import { forbiddenResponse } from "@/lib/auth/errors";
 import {
+  created,
+  errorResponse,
   paginated,
   withErrorHandler,
   zodErrorResponse,
 } from "@/lib/api/response";
-import { ReportListQuerySchema } from "@/schemas/report";
+import {
+  CreateReportRequestSchema,
+  ReportListQuerySchema,
+} from "@/schemas/report";
 
 export const GET = withAuth(
   withErrorHandler(async (request: AuthenticatedRequest) => {
@@ -136,5 +141,104 @@ export const GET = withAuth(
     }));
 
     return paginated(data, { page, per_page, total, total_pages });
+  }) as Parameters<typeof withAuth>[0],
+);
+
+export const POST = withAuth(
+  withErrorHandler(async (request: AuthenticatedRequest) => {
+    const body = await request.json();
+    const parsed = CreateReportRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      return zodErrorResponse(parsed.error);
+    }
+
+    const { report_date, problem, plan, status, visits } = parsed.data;
+    const currentUser = request.salesperson;
+
+    // Business rule: submitted requires at least 1 visit
+    if (status === "submitted" && (!visits || visits.length === 0)) {
+      return errorResponse(
+        "VALIDATION_ERROR",
+        "提出時は訪問記録が1件以上必要です",
+      );
+    }
+
+    // Validate customer_ids exist
+    if (visits && visits.length > 0) {
+      const customerIds = [...new Set(visits.map((v) => v.customer_id))];
+      const existingCustomers = await prisma.customer.findMany({
+        where: { id: { in: customerIds } },
+        select: { id: true },
+      });
+      const existingIds = new Set(existingCustomers.map((c) => c.id));
+      const invalidIds = customerIds.filter((id) => !existingIds.has(id));
+      if (invalidIds.length > 0) {
+        return errorResponse(
+          "VALIDATION_ERROR",
+          `存在しない顧客IDが指定されています: ${invalidIds.join(", ")}`,
+        );
+      }
+    }
+
+    // Create report + visit records in transaction
+    try {
+      const report = await prisma.$transaction(async (tx) => {
+        const dailyReport = await tx.dailyReport.create({
+          data: {
+            salespersonId: currentUser.id,
+            reportDate: new Date(report_date),
+            problem: problem ?? null,
+            plan: plan ?? null,
+            status,
+            visitRecords:
+              visits && visits.length > 0
+                ? {
+                    create: visits.map((v) => ({
+                      customerId: v.customer_id,
+                      visitTime: new Date(`1970-01-01T${v.visit_time}:00Z`),
+                      content: v.content,
+                    })),
+                  }
+                : undefined,
+          },
+          include: {
+            visitRecords: {
+              include: { customer: { select: { id: true, name: true } } },
+              orderBy: { visitTime: "asc" },
+            },
+          },
+        });
+        return dailyReport;
+      });
+
+      // Format response
+      const data = {
+        id: report.id,
+        report_date: report.reportDate.toISOString().split("T")[0],
+        problem: report.problem,
+        plan: report.plan,
+        status: report.status,
+        visits: report.visitRecords.map((vr) => ({
+          id: vr.id,
+          customer: vr.customer,
+          visit_time: vr.visitTime.toISOString().slice(11, 16),
+          content: vr.content,
+        })),
+        created_at: report.createdAt.toISOString(),
+      };
+
+      return created(data);
+    } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002"
+      ) {
+        return errorResponse(
+          "CONFLICT",
+          `${report_date} の日報は既に存在します`,
+        );
+      }
+      throw err;
+    }
   }) as Parameters<typeof withAuth>[0],
 );
