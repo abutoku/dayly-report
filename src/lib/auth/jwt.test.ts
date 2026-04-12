@@ -42,6 +42,45 @@ describe("JWT utilities", () => {
       await expect(verifyToken("not-a-jwt")).rejects.toThrow();
     });
 
+    it("should reject a token with missing payload fields", async () => {
+      const { SignJWT } = await import("jose");
+      const secret = new TextEncoder().encode(
+        process.env.JWT_SECRET ?? "dev-secret-change-me",
+      );
+      // Token without email/name/isManager
+      const token = await new SignJWT({})
+        .setProtectedHeader({ alg: "HS256" })
+        .setSubject("1")
+        .setIssuedAt()
+        .setIssuer("dayly-report")
+        .setExpirationTime("1h")
+        .sign(secret);
+
+      await expect(verifyToken(token)).rejects.toThrow("Invalid JWT payload");
+    });
+
+    it("should reject a token with invalid sub", async () => {
+      const { SignJWT } = await import("jose");
+      const secret = new TextEncoder().encode(
+        process.env.JWT_SECRET ?? "dev-secret-change-me",
+      );
+      const token = await new SignJWT({
+        email: "test@example.com",
+        name: "Test",
+        isManager: false,
+      })
+        .setProtectedHeader({ alg: "HS256" })
+        .setSubject("not-a-number")
+        .setIssuedAt()
+        .setIssuer("dayly-report")
+        .setExpirationTime("1h")
+        .sign(secret);
+
+      await expect(verifyToken(token)).rejects.toThrow(
+        "Invalid JWT payload: sub must be a positive number",
+      );
+    });
+
     it("should reject an expired token", async () => {
       // Create a token with 0 second expiration by directly using jose
       const { SignJWT } = await import("jose");

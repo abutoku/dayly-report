@@ -13,9 +13,7 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-const { withAuth } = await import("./middleware");
-const { isManager } = await import("./middleware");
-type AuthenticatedSalesperson = import("./middleware").AuthenticatedSalesperson;
+const { withAuth, isManager } = await import("./middleware");
 
 const activeSalesperson = {
   id: 1,
@@ -118,25 +116,60 @@ describe("withAuth middleware", () => {
 });
 
 describe("isManager", () => {
-  it("should return true when managerId is null (top-level manager)", () => {
-    const manager: AuthenticatedSalesperson = {
-      id: 10,
-      name: "鈴木部長",
-      email: "suzuki@example.com",
-      managerId: null,
-      isActive: true,
-    };
-    expect(isManager(manager)).toBe(true);
+  it("should return true when jwtPayload.isManager is true", () => {
+    const request = {
+      jwtPayload: {
+        sub: 10,
+        email: "suzuki@example.com",
+        name: "鈴木部長",
+        isManager: true,
+      },
+      salesperson: {
+        id: 10,
+        name: "鈴木部長",
+        email: "suzuki@example.com",
+        managerId: null,
+        isActive: true,
+      },
+    } as import("./middleware").AuthenticatedRequest;
+    expect(isManager(request)).toBe(true);
   });
 
-  it("should return false when managerId is set (subordinate)", () => {
-    const subordinate: AuthenticatedSalesperson = {
-      id: 1,
-      name: "田中太郎",
-      email: "tanaka@example.com",
-      managerId: 10,
-      isActive: true,
-    };
-    expect(isManager(subordinate)).toBe(false);
+  it("should return false when jwtPayload.isManager is false", () => {
+    const request = {
+      jwtPayload: {
+        sub: 1,
+        email: "tanaka@example.com",
+        name: "田中太郎",
+        isManager: false,
+      },
+      salesperson: {
+        id: 1,
+        name: "田中太郎",
+        email: "tanaka@example.com",
+        managerId: 10,
+        isActive: true,
+      },
+    } as import("./middleware").AuthenticatedRequest;
+    expect(isManager(request)).toBe(false);
+  });
+
+  it("should return true even when managerId is set (mid-level manager)", () => {
+    const request = {
+      jwtPayload: {
+        sub: 5,
+        email: "mid-manager@example.com",
+        name: "中間管理職",
+        isManager: true,
+      },
+      salesperson: {
+        id: 5,
+        name: "中間管理職",
+        email: "mid-manager@example.com",
+        managerId: 1,
+        isActive: true,
+      },
+    } as import("./middleware").AuthenticatedRequest;
+    expect(isManager(request)).toBe(true);
   });
 });

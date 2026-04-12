@@ -63,8 +63,12 @@ export function withAuth(handler: RouteHandler) {
   };
 }
 
-export function isManager(salesperson: AuthenticatedSalesperson): boolean {
-  return salesperson.managerId === null;
+/**
+ * JWT ペイロードの isManager フラグで上長判定を行う。
+ * managerId === null による判定では、上長の上にさらに上位者がいるケースに対応できないため。
+ */
+export function isManager(request: AuthenticatedRequest): boolean {
+  return request.jwtPayload.isManager;
 }
 
 export async function isSubordinate(

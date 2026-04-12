@@ -1,11 +1,20 @@
 import { SignJWT, jwtVerify, errors } from "jose";
 
-const JWT_SECRET_KEY = process.env.JWT_SECRET ?? "dev-secret-change-me";
+function getJwtSecretKey(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret && process.env.NODE_ENV === "production") {
+    throw new Error(
+      "JWT_SECRET environment variable must be set in production",
+    );
+  }
+  return secret ?? "dev-secret-change-me";
+}
+
 const JWT_ISSUER = "dayly-report";
 const JWT_EXPIRATION = "8h";
 
 function getSecret() {
-  return new TextEncoder().encode(JWT_SECRET_KEY);
+  return new TextEncoder().encode(getJwtSecretKey());
 }
 
 export interface JwtPayload {
@@ -31,12 +40,23 @@ export async function verifyToken(token: string): Promise<JwtPayload> {
     issuer: JWT_ISSUER,
   });
 
-  return {
-    sub: Number(payload.sub),
-    email: payload.email as string,
-    name: payload.name as string,
-    isManager: payload.isManager as boolean,
-  };
+  const sub = Number(payload.sub);
+  const { email, name, isManager } = payload;
+
+  if (!Number.isFinite(sub) || sub <= 0) {
+    throw new Error("Invalid JWT payload: sub must be a positive number");
+  }
+  if (typeof email !== "string" || email.length === 0) {
+    throw new Error("Invalid JWT payload: email must be a non-empty string");
+  }
+  if (typeof name !== "string" || name.length === 0) {
+    throw new Error("Invalid JWT payload: name must be a non-empty string");
+  }
+  if (typeof isManager !== "boolean") {
+    throw new Error("Invalid JWT payload: isManager must be a boolean");
+  }
+
+  return { sub, email, name, isManager };
 }
 
 export function isTokenExpiredError(error: unknown): boolean {
