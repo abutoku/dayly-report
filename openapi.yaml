@@ -1,0 +1,1436 @@
+openapi: "3.1.0"
+info:
+  title: 営業日報システム API
+  version: "1.0.0"
+  description: 営業日報システムの REST API 仕様
+servers:
+  - url: "http://localhost:3000"
+    description: 開発環境
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    LoginResponseData:
+      type: object
+      properties:
+        token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIs...
+        salesperson:
+          $ref: "#/components/schemas/LoginSalesperson"
+      required:
+        - token
+        - salesperson
+    LoginSalesperson:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: 田中太郎
+        email:
+          type: string
+          format: email
+          example: tanaka@example.com
+        is_manager:
+          type: boolean
+          example: true
+      required:
+        - id
+        - name
+        - email
+        - is_manager
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorBody"
+      required:
+        - error
+    ErrorBody:
+      type: object
+      properties:
+        code:
+          type: string
+          enum:
+            - VALIDATION_ERROR
+            - UNAUTHORIZED
+            - FORBIDDEN
+            - NOT_FOUND
+            - CONFLICT
+            - INTERNAL_ERROR
+          example: VALIDATION_ERROR
+        message:
+          type: string
+          example: リクエストの検証に失敗しました
+        details:
+          type: array
+          items:
+            $ref: "#/components/schemas/ErrorDetail"
+      required:
+        - code
+        - message
+    ErrorDetail:
+      type: object
+      properties:
+        path:
+          type: string
+          example: email
+        message:
+          type: string
+          example: メールアドレスは必須です
+        code:
+          type: string
+          example: invalid_type
+      required:
+        - path
+        - message
+        - code
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          example: tanaka@example.com
+        password:
+          type: string
+          minLength: 1
+          example: password123
+      required:
+        - email
+        - password
+    ReportListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        report_date:
+          type: string
+          example: "2026-04-04"
+        salesperson:
+          type: object
+          properties:
+            id:
+              type: integer
+              example: 1
+            name:
+              type: string
+              example: 田中太郎
+          required:
+            - id
+            - name
+        visit_count:
+          type: integer
+          example: 3
+        status:
+          $ref: "#/components/schemas/ReportStatus"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-04T17:00:00Z"
+      required:
+        - id
+        - report_date
+        - salesperson
+        - visit_count
+        - status
+        - created_at
+    ReportStatus:
+      type: string
+      enum:
+        - draft
+        - submitted
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        per_page:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 100
+        total_pages:
+          type: integer
+          example: 5
+      required:
+        - page
+        - per_page
+        - total
+        - total_pages
+    ReportMutationResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        report_date:
+          type: string
+          example: "2026-04-04"
+        problem:
+          type:
+            - string
+            - "null"
+          example: A商事の見積について、特別値引きの承認が必要。
+        plan:
+          type:
+            - string
+            - "null"
+          example: A商事への見積作成、B工業への議事録送付
+        status:
+          $ref: "#/components/schemas/ReportStatus"
+        visits:
+          type: array
+          items:
+            $ref: "#/components/schemas/VisitResponse"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-04T17:00:00Z"
+      required:
+        - id
+        - report_date
+        - problem
+        - plan
+        - status
+        - visits
+        - created_at
+    VisitResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        customer:
+          type: object
+          properties:
+            id:
+              type: integer
+              example: 1
+            name:
+              type: string
+              example: A商事
+          required:
+            - id
+            - name
+        visit_time:
+          type: string
+          example: "09:00"
+        content:
+          type: string
+          example: 新規提案の打合せ。見積依頼あり。
+      required:
+        - id
+        - customer
+        - visit_time
+        - content
+    CreateReportRequest:
+      type: object
+      properties:
+        report_date:
+          type: string
+          format: date
+          example: "2026-04-04"
+        problem:
+          type:
+            - string
+            - "null"
+          example: A商事の見積について、特別値引きの承認が必要。
+        plan:
+          type:
+            - string
+            - "null"
+          example: A商事への見積作成、B工業への議事録送付
+        status:
+          $ref: "#/components/schemas/ReportStatus"
+        visits:
+          type: array
+          items:
+            $ref: "#/components/schemas/VisitRequest"
+          description: 訪問記録の配列（提出時は1件以上必須）
+      required:
+        - report_date
+        - status
+    VisitRequest:
+      type: object
+      properties:
+        customer_id:
+          type: integer
+          example: 1
+        visit_time:
+          type: string
+          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+          example: "09:00"
+        content:
+          type: string
+          minLength: 1
+          example: 新規提案の打合せ。見積依頼あり。
+      required:
+        - customer_id
+        - visit_time
+        - content
+    ReportDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        report_date:
+          type: string
+          example: "2026-04-04"
+        salesperson:
+          type: object
+          properties:
+            id:
+              type: integer
+              example: 1
+            name:
+              type: string
+              example: 田中太郎
+          required:
+            - id
+            - name
+        problem:
+          type:
+            - string
+            - "null"
+          example: A商事の見積について、特別値引きの承認が必要。
+        plan:
+          type:
+            - string
+            - "null"
+          example: A商事への見積作成、B工業への議事録送付
+        status:
+          $ref: "#/components/schemas/ReportStatus"
+        visits:
+          type: array
+          items:
+            $ref: "#/components/schemas/VisitResponse"
+        comments:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+                example: 1
+              commenter:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                    example: 10
+                  name:
+                    type: string
+                    example: 鈴木部長
+                required:
+                  - id
+                  - name
+              content:
+                type: string
+                example: A商事の値引きは10%まで承認します。見積を確認させてください。
+              created_at:
+                type: string
+                format: date-time
+                example: "2026-04-04T18:30:00Z"
+            required:
+              - id
+              - commenter
+              - content
+              - created_at
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-04T17:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-04-04T17:00:00Z"
+      required:
+        - id
+        - report_date
+        - salesperson
+        - problem
+        - plan
+        - status
+        - visits
+        - comments
+        - created_at
+        - updated_at
+    UpdateReportRequest:
+      type: object
+      properties:
+        report_date:
+          type: string
+          format: date
+          example: "2026-04-04"
+        problem:
+          type:
+            - string
+            - "null"
+          example: A商事の見積について、特別値引きの承認が必要。
+        plan:
+          type:
+            - string
+            - "null"
+          example: A商事への見積作成、B工業への議事録送付
+        status:
+          $ref: "#/components/schemas/ReportStatus"
+        visits:
+          type: array
+          items:
+            $ref: "#/components/schemas/VisitRequest"
+          description: 訪問記録の配列（提出時は1件以上必須）
+      required:
+        - report_date
+        - status
+    CommentResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        commenter:
+          type: object
+          properties:
+            id:
+              type: integer
+              example: 10
+            name:
+              type: string
+              example: 鈴木部長
+          required:
+            - id
+            - name
+        content:
+          type: string
+          example: A商事の値引きは10%まで承認します。見積を確認させてください。
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-04-04T18:30:00Z"
+      required:
+        - id
+        - commenter
+        - content
+        - created_at
+    CreateCommentRequest:
+      type: object
+      properties:
+        content:
+          type: string
+          minLength: 1
+          example: A商事の値引きは10%まで承認します。見積を確認させてください。
+      required:
+        - content
+    CustomerListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: A商事
+        address:
+          type:
+            - string
+            - "null"
+          example: 東京都千代田区丸の内1-1-1
+        phone:
+          type:
+            - string
+            - "null"
+          example: "03-1234-5678"
+        is_active:
+          type: boolean
+          example: true
+      required:
+        - id
+        - name
+        - address
+        - phone
+        - is_active
+    CustomerDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: A商事
+        address:
+          type:
+            - string
+            - "null"
+          example: 東京都千代田区丸の内1-1-1
+        phone:
+          type:
+            - string
+            - "null"
+          example: "03-1234-5678"
+        is_active:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-01-15T09:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-03-20T14:00:00Z"
+      required:
+        - id
+        - name
+        - address
+        - phone
+        - is_active
+        - created_at
+        - updated_at
+    CreateCustomerRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          example: D電機
+        address:
+          type:
+            - string
+            - "null"
+          example: 名古屋市中区栄1-1-1
+        phone:
+          type:
+            - string
+            - "null"
+          pattern: ^[\d-]+$
+          example: "052-123-4567"
+      required:
+        - name
+    UpdateCustomerRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          example: A商事株式会社
+        address:
+          type:
+            - string
+            - "null"
+          example: 東京都千代田区丸の内1-1-1
+        phone:
+          type:
+            - string
+            - "null"
+          pattern: ^[\d-]+$
+          example: "03-1234-5678"
+        is_active:
+          type: boolean
+          example: true
+      required:
+        - name
+    SalespersonListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: 田中太郎
+        email:
+          type: string
+          format: email
+          example: tanaka@example.com
+        manager:
+          type:
+            - object
+            - "null"
+          properties:
+            id:
+              type: integer
+              example: 10
+            name:
+              type: string
+              example: 鈴木部長
+          required:
+            - id
+            - name
+        is_active:
+          type: boolean
+          example: true
+      required:
+        - id
+        - name
+        - email
+        - manager
+        - is_active
+    SalespersonDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: 田中太郎
+        email:
+          type: string
+          format: email
+          example: tanaka@example.com
+        manager:
+          type:
+            - object
+            - "null"
+          properties:
+            id:
+              type: integer
+              example: 10
+            name:
+              type: string
+              example: 鈴木部長
+          required:
+            - id
+            - name
+        is_active:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-01-10T09:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-03-01T11:00:00Z"
+      required:
+        - id
+        - name
+        - email
+        - manager
+        - is_active
+        - created_at
+        - updated_at
+    CreateSalespersonRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          example: 山田花子
+        email:
+          type: string
+          format: email
+          example: yamada@example.com
+        password:
+          type: string
+          minLength: 1
+          example: initial_password
+        manager_id:
+          type:
+            - integer
+            - "null"
+          example: 10
+      required:
+        - name
+        - email
+        - password
+    UpdateSalespersonRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          example: 田中太郎
+        email:
+          type: string
+          format: email
+          example: tanaka@example.com
+        password:
+          type: string
+          minLength: 1
+          description: 変更する場合のみ指定
+        manager_id:
+          type:
+            - integer
+            - "null"
+          example: 10
+        is_active:
+          type: boolean
+          example: true
+      required:
+        - name
+        - email
+  parameters: {}
+paths:
+  /api/v1/auth/login:
+    post:
+      summary: ログイン
+      tags:
+        - 認証
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        200:
+          description: 認証成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/LoginResponseData"
+                required:
+                  - data
+        401:
+          description: 未認証
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/auth/logout:
+    post:
+      summary: ログアウト
+      tags:
+        - 認証
+      security:
+        - BearerAuth: []
+
+      responses:
+        204:
+          description: ログアウト成功
+        401:
+          description: 未認証
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/reports:
+    get:
+      summary: 日報一覧取得
+      tags:
+        - 日報
+      security:
+        - BearerAuth: []
+
+      parameters:
+        - schema:
+            type: integer
+            minimum: 1
+            example: 1
+          required: false
+          name: page
+          in: query
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            example: 20
+          required: false
+          name: per_page
+          in: query
+        - schema:
+            type: string
+            format: date
+            example: "2026-04-01"
+          required: false
+          name: date_from
+          in: query
+        - schema:
+            type: string
+            format: date
+            example: "2026-04-30"
+          required: false
+          name: date_to
+          in: query
+        - schema:
+            type:
+              - integer
+              - "null"
+            example: 1
+          required: false
+          name: salesperson_id
+          in: query
+        - schema:
+            $ref: "#/components/schemas/ReportStatus"
+          required: false
+          name: status
+          in: query
+      responses:
+        200:
+          description: 日報一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ReportListItem"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+                required:
+                  - data
+                  - pagination
+        401:
+          description: 未認証
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        403:
+          description: 権限不足
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      summary: 日報作成
+      tags:
+        - 日報
+      security:
+        - BearerAuth: []
+
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReportRequest"
+      responses:
+        201:
+          description: 日報作成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/ReportMutationResponse"
+                required:
+                  - data
+        400:
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        401:
+          description: 未認証
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        409:
+          description: 同一日付の日報が既に存在
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/reports/{id}:
+    get:
+      summary: 日報詳細取得
+      tags:
+        - 日報
+      security:
+        - BearerAuth: []
+
+      parameters:
+        - schema:
+            type: integer
+            example: 1
+          required: true
+          name: id
+          in: path
+      responses:
+        200:
+          description: 日報詳細
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/ReportDetail"
+                required:
+                  - data
+        401:
+          description: 未認証
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        403:
+          description: 権限不足
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        404:
+          description: リソースが見つからない
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      summary: 日報更新
+      tags:
+        - 日報
+      security:
+        - BearerAuth: []
+
+      parameters:
+        - schema:
+            type: integer
+            example: 1
+          required: true
+          name: id
+          in: path
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateReportRequest"
+      responses:
+        200:
+          description: 日報更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/ReportMutationResponse"
+                required:
+                  - data
+        400:
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        401:
+          description: 未認証
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        403:
+          description: 権限不足
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        404:
+          description: リソースが見つからない
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      summary: 日報削除
+      tags:
+        - 日報
+      security:
+        - BearerAuth: []
+
+      parameters:
+        - schema:
+            type: integer
+            example: 1
+          required: true
+          name: id
+          in: path
+      responses:
+        204:
+          description: 日報削除成功
+        401:
+          description: 未認証
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        403:
+          description: 権限不足
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        404:
+          description: リソースが見つからない
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/reports/{id}/comments:
+    post:
+      summary: コメント投稿
+      tags:
+        - 日報
+      security:
+        - BearerAuth: []
+
+      parameters:
+        - schema:
+            type: integer
+            example: 1
+          required: true
+          name: id
+          in: path
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCommentRequest"
+      responses:
+        201:
+          description: コメント投稿成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/CommentResponse"
+                required:
+                  - data
+        400:
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        401:
+          description: 未認証
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        403:
+          description: 権限不足
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        404:
+          description: リソースが見つからない
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/customers:
+    get:
+      summary: 顧客一覧取得
+      tags:
+        - 顧客マスタ
+      security:
+        - BearerAuth: []
+
+      parameters:
+        - schema:
+            type: integer
+            minimum: 1
+            example: 1
+          required: false
+          name: page
+          in: query
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            example: 20
+          required: false
+          name: per_page
+          in: query
+        - schema:
+            type: string
+            example: 商事
+          required: false
+          name: name
+          in: query
+        - schema:
+            type: string
+            enum:
+              - "true"
+              - "false"
+          required: false
+          name: is_active
+          in: query
+      responses:
+        200:
+          description: 顧客一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CustomerListItem"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+                required:
+                  - data
+                  - pagination
+        401:
+          description: 未認証
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      summary: 顧客登録
+      tags:
+        - 顧客マスタ
+      security:
+        - BearerAuth: []
+
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCustomerRequest"
+      responses:
+        201:
+          description: 顧客登録成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/CustomerDetail"
+                required:
+                  - data
+        400:
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        401:
+          description: 未認証
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/customers/{id}:
+    get:
+      summary: 顧客詳細取得
+      tags:
+        - 顧客マスタ
+      security:
+        - BearerAuth: []
+
+      parameters:
+        - schema:
+            type: integer
+            example: 1
+          required: true
+          name: id
+          in: path
+      responses:
+        200:
+          description: 顧客詳細
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/CustomerDetail"
+                required:
+                  - data
+        401:
+          description: 未認証
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        404:
+          description: リソースが見つからない
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      summary: 顧客更新
+      tags:
+        - 顧客マスタ
+      security:
+        - BearerAuth: []
+
+      parameters:
+        - schema:
+            type: integer
+            example: 1
+          required: true
+          name: id
+          in: path
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCustomerRequest"
+      responses:
+        200:
+          description: 顧客更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/CustomerDetail"
+                required:
+                  - data
+        400:
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        401:
+          description: 未認証
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        404:
+          description: リソースが見つからない
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/salespersons:
+    get:
+      summary: 営業一覧取得
+      tags:
+        - 営業マスタ
+      security:
+        - BearerAuth: []
+
+      parameters:
+        - schema:
+            type: integer
+            minimum: 1
+            example: 1
+          required: false
+          name: page
+          in: query
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            example: 20
+          required: false
+          name: per_page
+          in: query
+        - schema:
+            type: string
+            enum:
+              - "true"
+              - "false"
+          required: false
+          name: is_active
+          in: query
+      responses:
+        200:
+          description: 営業一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SalespersonListItem"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+                required:
+                  - data
+                  - pagination
+        401:
+          description: 未認証
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        403:
+          description: 権限不足
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      summary: 営業登録
+      tags:
+        - 営業マスタ
+      security:
+        - BearerAuth: []
+
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSalespersonRequest"
+      responses:
+        201:
+          description: 営業登録成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/SalespersonDetail"
+                required:
+                  - data
+        400:
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        401:
+          description: 未認証
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        403:
+          description: 権限不足
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        409:
+          description: メールアドレスが重複
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/salespersons/{id}:
+    get:
+      summary: 営業詳細取得
+      tags:
+        - 営業マスタ
+      security:
+        - BearerAuth: []
+
+      parameters:
+        - schema:
+            type: integer
+            example: 1
+          required: true
+          name: id
+          in: path
+      responses:
+        200:
+          description: 営業詳細
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/SalespersonDetail"
+                required:
+                  - data
+        401:
+          description: 未認証
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        403:
+          description: 権限不足
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        404:
+          description: リソースが見つからない
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      summary: 営業更新
+      tags:
+        - 営業マスタ
+      security:
+        - BearerAuth: []
+
+      parameters:
+        - schema:
+            type: integer
+            example: 1
+          required: true
+          name: id
+          in: path
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSalespersonRequest"
+      responses:
+        200:
+          description: 営業更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/SalespersonDetail"
+                required:
+                  - data
+        400:
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        401:
+          description: 未認証
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        403:
+          description: 権限不足
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        404:
+          description: リソースが見つからない
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        409:
+          description: メールアドレスが重複
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+webhooks: {}
