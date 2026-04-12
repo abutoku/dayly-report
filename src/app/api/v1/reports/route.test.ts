@@ -739,5 +739,46 @@ describe("POST /api/v1/reports", () => {
       expect(response.status).toBe(401);
       expect(json.error.code).toBe("UNAUTHORIZED");
     });
+
+    // 無効化された顧客（is_active=false）のcustomer_idを指定 → 400
+    it("returns 400 when customer_id refers to inactive customer", async () => {
+      setupAuth(salesJwt, salesUser);
+      // customer_id 1 exists but is inactive — findMany with isActive:true returns empty
+      mockCustomerFindMany.mockResolvedValue([]);
+
+      const body = {
+        report_date: "2026-04-04",
+        status: "submitted",
+        visits: [{ customer_id: 1, visit_time: "09:00", content: "打合せ" }],
+      };
+
+      const response = await POST(createPostRequest("valid-token", body));
+      const json = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(json.error.code).toBe("VALIDATION_ERROR");
+      expect(json.error.message).toContain("1");
+    });
+
+    // 不正なJSONボディ → 400
+    it("returns 400 when request body is invalid JSON", async () => {
+      setupAuth(salesJwt, salesUser);
+
+      const req = new NextRequest("http://localhost/api/v1/reports", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer valid-token",
+          "Content-Type": "application/json",
+        },
+        body: "not-valid-json{{{",
+      });
+
+      const response = await POST(req);
+      const json = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(json.error.code).toBe("VALIDATION_ERROR");
+      expect(json.error.message).toContain("JSON");
+    });
   });
 });

@@ -146,7 +146,15 @@ export const GET = withAuth(
 
 export const POST = withAuth(
   withErrorHandler(async (request: AuthenticatedRequest) => {
-    const body = await request.json();
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return errorResponse(
+        "VALIDATION_ERROR",
+        "リクエストボディのJSON解析に失敗しました",
+      );
+    }
     const parsed = CreateReportRequestSchema.safeParse(body);
     if (!parsed.success) {
       return zodErrorResponse(parsed.error);
@@ -167,7 +175,7 @@ export const POST = withAuth(
     if (visits && visits.length > 0) {
       const customerIds = [...new Set(visits.map((v) => v.customer_id))];
       const existingCustomers = await prisma.customer.findMany({
-        where: { id: { in: customerIds } },
+        where: { id: { in: customerIds }, isActive: true },
         select: { id: true },
       });
       const existingIds = new Set(existingCustomers.map((c) => c.id));
