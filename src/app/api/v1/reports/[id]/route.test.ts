@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
+import { Prisma } from "@/generated/prisma/client";
 import { DELETE } from "./route";
 
 vi.mock("@/lib/prisma", () => ({
@@ -179,5 +180,30 @@ describe("DELETE /api/v1/reports/:id", () => {
 
     expect(response.status).toBe(401);
     expect(json.error.code).toBe("UNAUTHORIZED");
+  });
+
+  // 追加: findUnique と delete の間に他リクエストが削除 → P2025 を 404 に変換
+  it("returns 404 when the report is deleted concurrently (P2025)", async () => {
+    setupAuth(salesJwt, salesUser);
+    mockDailyReportFindUnique.mockResolvedValue({
+      id: 1,
+      salespersonId: 1,
+      status: "draft",
+    });
+    mockDailyReportDelete.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError(
+        "An operation failed because it depends on one or more records that were required but not found.",
+        { code: "P2025", clientVersion: "test" },
+      ),
+    );
+
+    const response = await DELETE(
+      createDeleteRequest("1", "valid-token"),
+      createContext("1"),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(json.error.code).toBe("NOT_FOUND");
   });
 });

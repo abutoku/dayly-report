@@ -1,4 +1,5 @@
 import "@/schemas/setup";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { type AuthenticatedRequest, withAuth } from "@/lib/auth/middleware";
 import { forbiddenResponse } from "@/lib/auth/errors";
@@ -54,7 +55,19 @@ export const DELETE = withAuth(
     }
 
     // 削除実行 (visit_records は cascade で自動削除)
-    await prisma.dailyReport.delete({ where: { id } });
+    // findUnique と delete の間に他リクエストが削除した場合、Prisma は P2025 を投げる。
+    // この場合は 404 として返し、500 にならないようにする。
+    try {
+      await prisma.dailyReport.delete({ where: { id } });
+    } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2025"
+      ) {
+        return errorResponse("NOT_FOUND", "指定された日報は存在しません");
+      }
+      throw err;
+    }
 
     return noContent();
   }) as Parameters<typeof withAuth>[0],
